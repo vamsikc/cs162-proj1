@@ -207,6 +207,7 @@ public class PriorityScheduler extends Scheduler {
 		    this.thread = thread;
 		    
 		    setPriority(priorityDefault);
+		    effectivePriority = this.priority;
 		    acquiredResources = new LinkedList<PriorityQueue>();
 		}
 
@@ -225,8 +226,19 @@ public class PriorityScheduler extends Scheduler {
 		 * @return	the effective priority of the associated thread.
 		 */
 		public int getEffectivePriority() {
-		    // implement me
-		    return priority;
+			int effectivePriority = priority;
+		    for (PriorityQueue p : acquiredResources) {
+		    	effectivePriority = Math.max(effectiveHelper(p), effectivePriority);
+		    }
+		    return effectivePriority;
+		}
+
+		public int effectiveHelper(PriorityQueue p) {
+			int maxP = 0;
+			for (ThreadState s: p.waitingThreads) {
+		    	maxP = Math.max(maxP, s.getEffectivePriority());
+		    }
+		    return maxP;
 		}
 
 		/**
@@ -238,7 +250,8 @@ public class PriorityScheduler extends Scheduler {
 		    if (this.priority == priority)
 				return;
 		    
-		    this.priority = priority;
+		    this.priority = Math.max(priority, PriorityScheduler.priorityMinimum);
+		    this.priority = Math.min(priority, PriorityScheduler.priorityMaximum);
 		    
 		    // implement me
 		}
@@ -289,6 +302,7 @@ public class PriorityScheduler extends Scheduler {
 		protected KThread thread;
 		/** The priority of the associated thread. */
 		protected int priority;
+		protected int effectivePriority;
 		protected Queue<PriorityQueue> acquiredResources;
     }
 }
