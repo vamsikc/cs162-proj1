@@ -253,6 +253,7 @@ public class PriorityScheduler extends Scheduler {
 			for (ThreadState s: p.waitingThreads) {
 				if (s.dirty) {
 		    		maxP = Math.max(maxP, s.getEffectivePriority());
+		    		dirty = false;
 		    	} else {
 		    		return s.effectivePriority;
 		    	}
