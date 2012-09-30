@@ -8,6 +8,7 @@ import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.LinkedList;
+import java.util.HashMap;
 
 /**
  * A scheduler that chooses threads based on their priorities.
@@ -155,8 +156,14 @@ public class PriorityScheduler extends Scheduler {
 		    	return null;
 		    }
 		    if (owner != null) {
-		    	this.acquire(owner);
-		    }
+		    	ThreadState ownerState = getThreadState(owner);
+				Queue<PriorityQueue> ownerResources = ownerState.acquiredResources;
+				if (ownerResources != null && !ownerResources.isEmpty()) {
+					ownerResources.remove(this);
+					ownerState.resourceMap.remove(this);
+				}
+			}
+	    	this.acquire(next.thread);
 		    waitingThreads.remove();
 		    return next.thread;
 		}
@@ -208,7 +215,9 @@ public class PriorityScheduler extends Scheduler {
 		    
 		    setPriority(priorityDefault);
 		    effectivePriority = this.priority;
+		    dirty = false;
 		    acquiredResources = new LinkedList<PriorityQueue>();
+		    resourceMap = new HashMap<PriorityQueue, Integer> ();
 		}
 
 		/**
@@ -226,9 +235,15 @@ public class PriorityScheduler extends Scheduler {
 		 * @return	the effective priority of the associated thread.
 		 */
 		public int getEffectivePriority() {
-			int effectivePriority = priority;
+			effectivePriority = priority;
 		    for (PriorityQueue p : acquiredResources) {
-		    	effectivePriority = Math.max(effectiveHelper(p), effectivePriority);
+		    	Integer value = resourceMap.get(p);
+		    	if (value == null) {
+		    		effectivePriority = Math.max(effectiveHelper(p), effectivePriority);
+		    		resourceMap.put(p, new Integer(effectivePriority));
+		    	} else {
+		    		effectivePriority = Math.max(value, effectivePriority);
+		    	}
 		    }
 		    return effectivePriority;
 		}
@@ -236,7 +251,11 @@ public class PriorityScheduler extends Scheduler {
 		public int effectiveHelper(PriorityQueue p) {
 			int maxP = 0;
 			for (ThreadState s: p.waitingThreads) {
-		    	maxP = Math.max(maxP, s.getEffectivePriority());
+				if (s.dirty) {
+		    		maxP = Math.max(maxP, s.getEffectivePriority());
+		    	} else {
+		    		return s.effectivePriority;
+		    	}
 		    }
 		    return maxP;
 		}
@@ -249,11 +268,14 @@ public class PriorityScheduler extends Scheduler {
 		public void setPriority(int priority) {
 		    if (this.priority == priority)
 				return;
-		    
-		    this.priority = Math.max(priority, PriorityScheduler.priorityMinimum);
-		    this.priority = Math.min(priority, PriorityScheduler.priorityMaximum);
-		    
+
 		    // implement me
+		    int p = Math.max(priority, PriorityScheduler.priorityMinimum);
+		    p = Math.min(priority, PriorityScheduler.priorityMaximum);
+		    if (p != this.priority) {
+		    	dirty = true;
+		    }
+		    this.priority = p;
 		}
 
 		/**
@@ -304,5 +326,7 @@ public class PriorityScheduler extends Scheduler {
 		protected int priority;
 		protected int effectivePriority;
 		protected Queue<PriorityQueue> acquiredResources;
+		protected boolean dirty;
+		protected HashMap<PriorityQueue, Integer> resourceMap;
     }
 }
