@@ -131,12 +131,10 @@ public class PriorityScheduler extends Scheduler {
      */
     protected class PriorityQueue extends ThreadQueue {
     	private KThread owner;
-    	private boolean resource_dirty = true;
 		PriorityQueue(boolean transferPriority) {
 		    this.transferPriority = transferPriority;
 		    waitingThreads = new java.util.PriorityQueue<ThreadState> ();
 		    owner = null;
-		    resource_dirty = true;
 		}
 
 		public void waitForAccess(KThread thread) {
@@ -351,14 +349,14 @@ public class PriorityScheduler extends Scheduler {
 
 		public int compareTo(Object t) {
 			ThreadState a = (ThreadState) t;
-			if (a.getPriority() > this.getPriority()) {
+			if (this.getPriority() < a.getPriority()) {
 				return 1;
-			} else if (a.getPriority() < this.getPriority()) {
+			} else if (this.getPriority() > a.getPriority()) {
 				return -1;
 			} else {
-				if (a.timeQueued < this.timeQueued) {
+				if (this.timeQueued > a.timeQueued) {
 					return 1;
-				} else if (a.timeQueued > this.timeQueued) {
+				} else if (this.timeQueued < a.timeQueued) {
 					return -1;
 				}
 			}

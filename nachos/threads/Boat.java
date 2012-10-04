@@ -129,26 +129,31 @@ public class Boat
 
     static void ChildItinerary()
     {
+        boolean terminationPossible;
         pilotSeat.acquire();
         numChildrenOnOahu++;
         String location = "Oahu";
         while (true) {
+            terminationPossible = false;
             if (location == "Oahu") {
                 if (Boat.boatLocation == "Oahu") {
                     if (numChildrenOnOahu == 1 && !hasChildPilot) {
                         canRowToMolokai.wake();
                         canRowToMolokai.sleep();
                     } else if (hasChildPilot && !hasPassenger) {
-                        numChildrenOnOahu--;
+                        if (numChildrenOnOahu == 2 && numAdultsOnOahu == 0) {
+                            terminationPossible = true;
+                        }
                         passengerCondition.wake();
                         hasPassenger = true;
                         passengerCondition.sleep();
+                        numChildrenOnOahu--;
                         bg.ChildRideToMolokai();
                         numChildrenOnMolokai++;
                         location = "Molokai";
                         hasChildPilot = false;
                         hasPassenger = false;
-                        if (numChildrenOnOahu == 0 && numAdultsOnOahu == 0) {
+                        if (terminationPossible) {
                             //possible termination condition
                             //child was the last one to leave Oahu at that time
                             terminationLock.acquire();
@@ -160,9 +165,9 @@ public class Boat
                         canRowToOahu.sleep();
                     } else if (!hasChildPilot) {
                         hasChildPilot = true;
-                        numChildrenOnOahu--;
                         canRowToMolokai.wake();
                         passengerCondition.sleep();
+                        numChildrenOnOahu--;
                         bg.ChildRowToMolokai();
                         numChildrenOnMolokai++;
                         location = "Molokai";
@@ -177,11 +182,11 @@ public class Boat
                 }
             } else {
                 if (Boat.boatLocation == "Molokai") {
-                    numChildrenOnOahu++;
                     Boat.boatLocation = "Oahu";
                     location = "Oahu";
-                    bg.ChildRowToOahu();
                     numChildrenOnMolokai--;
+                    bg.ChildRowToOahu();
+                    numChildrenOnOahu++;
                     canRowToMolokai.wake();
                     canRowToMolokai.sleep();
                 } else {

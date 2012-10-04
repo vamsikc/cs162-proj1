@@ -443,8 +443,6 @@ public class KThread {
     private String name = "(unnamed thread)";
     private Runnable target;
     private TCB tcb;
-    private boolean join_called = false;
-    private KThread join_to = null;
 
     /**
     * Unique identifer for this thread. Used to deterministically compare
