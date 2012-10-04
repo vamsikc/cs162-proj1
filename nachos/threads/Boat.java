@@ -23,7 +23,7 @@ public class Boat
     {
         BoatGrader b = new BoatGrader();
         System.out.println("\n ***Testing Boats with only 2 children***");
-        begin(5, 2, b);
+        begin(0, 2, b);
 
     //  System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
     //      begin(1, 2, b);
@@ -41,7 +41,7 @@ public class Boat
         // Instantiate global variables here
         
         numAdultsOnOahu = numChildrenOnOahu = numAdultsOnMolokai = numChildrenOnMolokai = 0;
-        Boat.boatLocation = "Oahu";
+        boatLocation = "Oahu";
         pilotSeat = new Lock();
         terminationLock = new Lock();
         canRowToMolokai = new Condition2(pilotSeat);
@@ -99,29 +99,31 @@ public class Boat
         while (true) {
             if (location == "Oahu" && Boat.boatLocation == "Oahu") {
                 if (numChildrenOnOahu == 1 && hasChildPilot == false) {
-                    numAdultsOnMolokai++;
                     numAdultsOnOahu--;
                     bg.AdultRowToMolokai();
+                    numAdultsOnMolokai++;
                     Boat.boatLocation = "Molokai";
                     location = "Molokai";
-                    if (numChildrenOnMolokai == 0) {
+                    if (numChildrenOnMolokai != 0) {
+                        //there is a child to bring the boat back to Oahu
+                        //Adult has been succesfully transported across
+                        canRowToOahu.wake();
+                        pilotSeat.release();
+                        break;
+                    } else {
                         numAdultsOnMolokai--;
-                        numAdultsOnOahu++;
                         bg.AdultRowToOahu();
+                        numAdultsOnOahu++;
                         Boat.boatLocation = "Oahu";
                         location = "Oahu";
                         canRowToMolokai.sleep();
                         continue;
-                    } else {
-                        canRowToOahu.wake();
-                        pilotSeat.release();
-                        break;
                     }
                 } else if (numChildrenOnOahu > 0) {
                     canRowToMolokai.wake();
                 } 
-                canRowToMolokai.sleep();
-            }
+            } 
+            canRowToMolokai.sleep();
         }
     }
 
@@ -131,53 +133,60 @@ public class Boat
         numChildrenOnOahu++;
         String location = "Oahu";
         while (true) {
-            if (location == "Oahu" && boatLocation == "Oahu") {
-                if (numChildrenOnOahu == 1 && !hasChildPilot) {
-                    canRowToMolokai.wake();
-                    canRowToMolokai.sleep();
-                } else if (hasChildPilot && !hasPassenger) {
-                    numChildrenOnOahu--;
-                    passengerCondition.wake();
-                    hasPassenger = true;
-                    passengerCondition.sleep();
-                    numChildrenOnMolokai++;
-                    hasChildPilot = false;
-                    hasPassenger = false;
-                    location = "Molokai";
-                    bg.ChildRideToMolokai();
-                    Boat.boatLocation = "Molokai";
-                    if (numChildrenOnOahu == 0 && numAdultsOnOahu == 0) {
-                        terminationLock.acquire();
-                        terminationCondition.wake();
-                        terminationLock.release();
+            if (location == "Oahu") {
+                if (Boat.boatLocation == "Oahu") {
+                    if (numChildrenOnOahu == 1 && !hasChildPilot) {
+                        canRowToMolokai.wake();
+                        canRowToMolokai.sleep();
+                    } else if (hasChildPilot && !hasPassenger) {
+                        numChildrenOnOahu--;
+                        passengerCondition.wake();
+                        hasPassenger = true;
+                        passengerCondition.sleep();
+                        bg.ChildRideToMolokai();
+                        numChildrenOnMolokai++;
+                        location = "Molokai";
+                        hasChildPilot = false;
+                        hasPassenger = false;
+                        if (numChildrenOnOahu == 0 && numAdultsOnOahu == 0) {
+                            //possible termination condition
+                            //child was the last one to leave Oahu at that time
+                            terminationLock.acquire();
+                            terminationCondition.wake();
+                            terminationLock.release();
+                        } else {
+                            canRowToOahu.wake();
+                        }
+                        canRowToOahu.sleep();
+                    } else if (!hasChildPilot) {
+                        hasChildPilot = true;
+                        numChildrenOnOahu--;
+                        canRowToMolokai.wake();
+                        passengerCondition.sleep();
+                        bg.ChildRowToMolokai();
+                        numChildrenOnMolokai++;
+                        location = "Molokai";
+                        passengerCondition.wake();
+                        Boat.boatLocation = "Molokai";
+                        canRowToOahu.sleep();
                     } else {
-                        canRowToOahu.wake();
+                        canRowToMolokai.sleep();
                     }
-                    canRowToOahu.sleep();
-                } else if (!hasChildPilot) {
-                    hasChildPilot = true;
-                    numChildrenOnOahu--;
-                    canRowToMolokai.wake();
-                    passengerCondition.sleep();
-                    numChildrenOnMolokai++;
-                    location = "Molokai";
-                    bg.ChildRowToMolokai();
-                    passengerCondition.wake();
-                    Boat.boatLocation = "Molokai";
-                    canRowToOahu.sleep();
-                } else {
+                } else { 
                     canRowToMolokai.sleep();
                 }
-            } else if (Boat.boatLocation == "Molokai") {
-                numChildrenOnOahu++;
-                numChildrenOnMolokai--;
-                Boat.boatLocation = "Oahu";
-                location = "Oahu";
-                bg.ChildRowToOahu();
-                canRowToMolokai.wake();
-                canRowToMolokai.sleep();
-            } else if (Boat.boatLocation == "Molokai" && location == "Molokai") {
-                canRowToOahu.sleep();
+            } else {
+                if (Boat.boatLocation == "Molokai") {
+                    numChildrenOnOahu++;
+                    Boat.boatLocation = "Oahu";
+                    location = "Oahu";
+                    bg.ChildRowToOahu();
+                    numChildrenOnMolokai--;
+                    canRowToMolokai.wake();
+                    canRowToMolokai.sleep();
+                } else {
+                    canRowToOahu.sleep();
+                }
             }
         }
     }

@@ -131,10 +131,12 @@ public class PriorityScheduler extends Scheduler {
      */
     protected class PriorityQueue extends ThreadQueue {
     	private KThread owner;
+    	private boolean resource_dirty = true;
 		PriorityQueue(boolean transferPriority) {
 		    this.transferPriority = transferPriority;
 		    waitingThreads = new java.util.PriorityQueue<ThreadState> ();
 		    owner = null;
+		    resource_dirty = true;
 		}
 
 		public void waitForAccess(KThread thread) {
@@ -215,9 +217,10 @@ public class PriorityScheduler extends Scheduler {
 		    
 		    setPriority(priorityDefault);
 		    effectivePriority = this.priority;
-		    dirty = false;
 		    acquiredResources = new LinkedList<PriorityQueue>();
 		    resourceMap = new HashMap<PriorityQueue, Integer> ();
+		    timeQueued = 0;
+		    waitingOn = null;
 		}
 
 		/**
@@ -235,15 +238,14 @@ public class PriorityScheduler extends Scheduler {
 		 * @return	the effective priority of the associated thread.
 		 */
 		public int getEffectivePriority() {
-			effectivePriority = priority;
+			effectivePriority = this.priority;
 		    for (PriorityQueue p : acquiredResources) {
 		    	Integer value = resourceMap.get(p);
 		    	if (value == null) {
-		    		effectivePriority = Math.max(effectiveHelper(p), effectivePriority);
-		    		resourceMap.put(p, new Integer(effectivePriority));
-		    	} else {
-		    		effectivePriority = Math.max(value, effectivePriority);
+		    		value = effectiveHelper(p);
+		    		resourceMap.put(p, new Integer(value));
 		    	}
+		    	effectivePriority = Math.max(value, effectivePriority);
 		    }
 		    return effectivePriority;
 		}
@@ -251,12 +253,7 @@ public class PriorityScheduler extends Scheduler {
 		public int effectiveHelper(PriorityQueue p) {
 			int maxP = 0;
 			for (ThreadState s: p.waitingThreads) {
-				if (s.dirty) {
-		    		maxP = Math.max(maxP, s.getEffectivePriority());
-		    		dirty = false;
-		    	} else {
-		    		return s.effectivePriority;
-		    	}
+		    	maxP = Math.max(maxP, s.getEffectivePriority());
 		    }
 		    return maxP;
 		}
@@ -273,10 +270,11 @@ public class PriorityScheduler extends Scheduler {
 		    // implement me
 		    int p = Math.max(priority, PriorityScheduler.priorityMinimum);
 		    p = Math.min(priority, PriorityScheduler.priorityMaximum);
-		    if (p != this.priority) {
-		    	dirty = true;
-		    }
 		    this.priority = p;
+		    if (this.waitingOn == null) {
+		    	return;
+		    }
+		    backwardPriorityHelper(this.waitingOn, this.priority);
 		}
 
 		/**
@@ -292,7 +290,47 @@ public class PriorityScheduler extends Scheduler {
 		 * @see	nachos.threads.ThreadQueue#waitForAccess
 		 */
 		public void waitForAccess(PriorityQueue waitQueue) {
+			this.timeQueued = Machine.timer().getTime();
 		    waitQueue.waitingThreads.add(this);
+		    waitingOn = waitQueue;
+		    KThread owner = waitQueue.owner;
+		    if (owner == null) {
+		    	return;
+		    }
+			ThreadState state = getThreadState(owner);
+		    HashMap<PriorityQueue, Integer> map = state.resourceMap;
+		    if (map.keySet().size() == 0) {
+		    	return;
+		    }
+	    	int temp = map.get(waitQueue);
+		    int newP = this.getEffectivePriority();
+		    if (newP > temp) {
+		    	state.resourceMap.put(waitQueue, newP);
+		    	if (state.waitingOn == null) {
+		    		return;
+		    	}
+		    	backwardPriorityHelper(state.waitingOn, newP);
+		    }
+		}
+
+		public void backwardPriorityHelper(PriorityQueue waiting, int newPriority) {
+			KThread owner = waiting.owner;
+			if (owner == null) {
+				return;
+			}
+			ThreadState state = getThreadState(owner);
+			HashMap<PriorityQueue, Integer> map = state.resourceMap;
+			if (map.keySet().size() == 0) {
+		    	return;
+		    }
+		    int temp = map.get(waiting);
+			if (newPriority > temp) {
+				state.resourceMap.put(waiting, newPriority);
+				if (state.waitingOn == null) {
+					return;
+				}
+				backwardPriorityHelper(state.waitingOn, newPriority);
+			}
 		}
 
 		/**
@@ -317,6 +355,12 @@ public class PriorityScheduler extends Scheduler {
 				return 1;
 			} else if (a.getPriority() < this.getPriority()) {
 				return -1;
+			} else {
+				if (a.timeQueued < this.timeQueued) {
+					return 1;
+				} else if (a.timeQueued > this.timeQueued) {
+					return -1;
+				}
 			}
 			return 0;
 		}
@@ -327,7 +371,8 @@ public class PriorityScheduler extends Scheduler {
 		protected int priority;
 		protected int effectivePriority;
 		protected Queue<PriorityQueue> acquiredResources;
-		protected boolean dirty;
 		protected HashMap<PriorityQueue, Integer> resourceMap;
+		protected long timeQueued;
+		protected PriorityQueue waitingOn;
     }
 }
